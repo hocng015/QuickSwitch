@@ -1,0 +1,24 @@
+# Build outputs
+bin/
+obj/
+out/
+release/
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+*.csproj.user
+
+# Node
+discord-bot/node_modules/
+discord-bot/.env
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Dalamud dev
+*.pdb
+*.nupkg
