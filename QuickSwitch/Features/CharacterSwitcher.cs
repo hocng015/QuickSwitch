@@ -3,6 +3,7 @@ using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
 using FFXIVClientStructs.FFXIV.Client.System.String;
 using FFXIVClientStructs.FFXIV.Client.UI;
+using FFXIVClientStructs.FFXIV.Client.UI.Agent;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace QuickSwitch.Features;
@@ -81,12 +82,6 @@ public class CharacterSwitcher : IDisposable
         if (IsSwitching)
         {
             chatGui.Print("[QuickSwitch] Already switching. Use /qs abort to cancel.");
-            return false;
-        }
-
-        if (target.CharacterSlot < 0)
-        {
-            chatGui.Print($"[QuickSwitch] Character slot not set for {target.Name}. Please configure it in the QuickSwitch settings.");
             return false;
         }
 
@@ -376,6 +371,9 @@ public class CharacterSwitcher : IDisposable
             var addon = GetAddon("_CharaSelectListMenu");
             if (addon != null)
             {
+                // Auto-detect character slots from AgentLobby
+                ScanAndUpdateCharacterSlots();
+
                 if (logoutOnly)
                 {
                     Complete("Reached character select screen.");
@@ -402,6 +400,23 @@ public class CharacterSwitcher : IDisposable
             var addon = GetAddon("_CharaSelectListMenu");
             if (addon == null) return;
 
+            // Find the target character's index in the live AgentLobby entries by ContentId
+            var slotIndex = FindCharacterIndexInLobby(targetCharacter.ContentId);
+            if (slotIndex < 0)
+            {
+                // Fall back to stored slot if ContentId lookup fails
+                if (targetCharacter.CharacterSlot >= 0)
+                {
+                    slotIndex = targetCharacter.CharacterSlot;
+                    log.Warning($"[QuickSwitch] ContentId lookup failed, falling back to stored slot {slotIndex + 1}.");
+                }
+                else
+                {
+                    Fail($"Character '{targetCharacter.Name}' not found on character select screen.");
+                    return;
+                }
+            }
+
             // FireCallback with command 29 to select a character by slot index
             var values = stackalloc AtkValue[3];
             values[0].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;
@@ -409,11 +424,11 @@ public class CharacterSwitcher : IDisposable
             values[1].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;
             values[1].Int = 0;
             values[2].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;
-            values[2].Int = targetCharacter.CharacterSlot;
+            values[2].Int = slotIndex;
             addon->FireCallback(3, values);
 
             SetState(SwitchState.WaitingForLoginConfirm);
-            UpdateStatus($"Selected slot {targetCharacter.CharacterSlot + 1}. Waiting for login confirmation...");
+            UpdateStatus($"Selected {targetCharacter.Name} (slot {slotIndex + 1}). Waiting for login confirmation...");
         }
     }
 
@@ -460,6 +475,88 @@ public class CharacterSwitcher : IDisposable
         {
             Complete($"Switched to {targetCharacter?.Name ?? "character"}!");
         }
+    }
+
+    /// <summary>
+    /// Scan the character select screen via AgentLobby and update stored slot indices
+    /// for all known characters. This auto-detects slots so users don't have to configure them.
+    /// </summary>
+    private unsafe void ScanAndUpdateCharacterSlots()
+    {
+        try
+        {
+            var agent = AgentLobby.Instance();
+            if (agent == null)
+            {
+                log.Warning("[QuickSwitch] AgentLobby is null, cannot scan character slots.");
+                return;
+            }
+
+            var entries = agent->LobbyData.CharaSelectEntries;
+            if (entries.Count == 0)
+            {
+                log.Warning("[QuickSwitch] No character entries in AgentLobby.");
+                return;
+            }
+
+            var updated = 0;
+            for (var i = 0; i < (int)entries.Count; i++)
+            {
+                var entryPtr = entries[i];
+                if (entryPtr.Value == null) continue;
+
+                var entry = entryPtr.Value;
+                var contentId = entry->ContentId;
+                if (contentId == 0) continue;
+
+                var saved = config.FindCharacterByContentId(contentId);
+                if (saved != null && saved.CharacterSlot != i)
+                {
+                    var oldSlot = saved.CharacterSlot;
+                    saved.CharacterSlot = i;
+                    updated++;
+                    log.Info($"[QuickSwitch] Auto-detected slot for {saved.Name}: {(oldSlot >= 0 ? $"slot {oldSlot + 1}" : "No slot")} -> slot {i + 1}");
+                }
+            }
+
+            if (updated > 0)
+            {
+                config.Save();
+                log.Info($"[QuickSwitch] Updated {updated} character slot(s) from lobby data.");
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Error($"[QuickSwitch] Error scanning character slots: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Find a character's index in the live AgentLobby entries by ContentId.
+    /// Returns the 0-based index, or -1 if not found.
+    /// </summary>
+    private unsafe int FindCharacterIndexInLobby(ulong contentId)
+    {
+        try
+        {
+            var agent = AgentLobby.Instance();
+            if (agent == null) return -1;
+
+            var entries = agent->LobbyData.CharaSelectEntries;
+            for (var i = 0; i < (int)entries.Count; i++)
+            {
+                var entryPtr = entries[i];
+                if (entryPtr.Value == null) continue;
+                if (entryPtr.Value->ContentId == contentId)
+                    return i;
+            }
+        }
+        catch (Exception ex)
+        {
+            log.Error($"[QuickSwitch] Error finding character in lobby: {ex.Message}");
+        }
+
+        return -1;
     }
 
     /// <summary>

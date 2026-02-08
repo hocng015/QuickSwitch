@@ -54,7 +54,7 @@ export function buildSwitchEmbed(characters, status) {
     // Build character list fields
     const charLines = characters.map((c, i) => {
         const current = c.isCurrent ? ' **[CURRENT]**' : '';
-        const slotInfo = c.slot >= 0 ? `Slot ${c.slot + 1}` : 'No slot';
+        const slotInfo = c.slot >= 0 ? `Slot ${c.slot + 1}` : 'Auto';
         const lastLogin = c.lastLogin ? formatRelativeTime(c.lastLogin) : '';
         return `**${i + 1}.** ${c.name} — ${c.homeWorld} (${slotInfo})${current}${lastLogin ? ` • ${lastLogin}` : ''}`;
     });
@@ -65,15 +65,15 @@ export function buildSwitchEmbed(characters, status) {
         inline: false,
     });
 
-    // Build select menu for switching (only characters with valid slots that aren't current)
-    const switchable = characters.filter(c => !c.isCurrent && c.slot >= 0);
+    // Build select menu for switching (all non-current characters)
+    const switchable = characters.filter(c => !c.isCurrent);
     const components = [];
 
     if (switchable.length > 0) {
         const options = switchable.slice(0, 25).map(c =>
             new StringSelectMenuOptionBuilder()
                 .setLabel(c.name)
-                .setDescription(`${c.homeWorld} — Slot ${c.slot + 1}`)
+                .setDescription(`${c.homeWorld}${c.slot >= 0 ? ` — Slot ${c.slot + 1}` : ''}`)
                 .setValue(c.name)
         );
 

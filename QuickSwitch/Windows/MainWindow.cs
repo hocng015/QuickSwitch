@@ -157,14 +157,14 @@ public class MainWindow : Window, IDisposable
                 if (ch.CharacterSlot >= 0)
                     ImGui.Text($"Slot {ch.CharacterSlot + 1}");
                 else
-                    ImGui.TextColored(new Vector4(1f, 0.5f, 0.2f, 1f), "No slot");
+                    ImGui.TextColored(new Vector4(0.5f, 0.8f, 1f, 1f), "Auto");
 
                 // Time since last login
                 ImGui.SameLine(380);
                 ImGui.TextColored(new Vector4(0.5f, 0.5f, 0.5f, 1f), FormatTimeSince(ch.LastLogin));
 
                 // Action buttons
-                var canSwitch = !switcher.IsSwitching && !isCurrent && ch.CharacterSlot >= 0
+                var canSwitch = !switcher.IsSwitching && !isCurrent
                     && Plugin.ClientState.IsLoggedIn;
 
                 // Show cooldown remaining if applicable
@@ -365,7 +365,7 @@ public class MainWindow : Window, IDisposable
         ImGui.Spacing();
 
         ImGui.TextWrapped("Character Slot: The position (1-8) of the character on your character select screen. " +
-            "Required for auto-switching. Count from top to bottom starting at 1.");
+            "Slots are auto-detected when the character select screen loads. You can also set them manually via Edit.");
     }
 
     private async System.Threading.Tasks.Task DoPairAsync(string code)
