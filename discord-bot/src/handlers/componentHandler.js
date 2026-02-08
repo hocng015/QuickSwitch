@@ -23,7 +23,6 @@ import { buildAuditLogEmbed } from '../ui/adminEmbeds.js';
 import { isAdmin, postLog } from '../middleware.js';
 import { getAuditLogs, isQsAllowed } from '../db.js';
 import { renderMapPreview } from '../ui/mapRenderer.js';
-import { postManualHuntAlert } from '../hunts/huntListener.js';
 
 import { findZone } from '../data/zoneIndex.js';
 
@@ -163,10 +162,8 @@ export async function handleComponent(interaction) {
     const userId = interaction.user.id;
     const customId = interaction.customId;
 
-    // Check plugin online (except status refresh and hunt buttons)
-    const skipOnlineCheck = customId.startsWith('status_')
-        || customId.startsWith('hunt_travel_')
-        || customId === 'hunt_dismiss';
+    // Check plugin online (except status refresh)
+    const skipOnlineCheck = customId.startsWith('status_');
     if (!pluginSocket.isOnline(userId) && !skipOnlineCheck) {
         await interaction.update({ ...buildOfflineEmbed(), components: [] });
         return;
@@ -620,66 +617,6 @@ export async function handleComponent(interaction) {
         return;
     }
 
-    // --- Hunt: Travel Now ---
-    if (customId.startsWith('hunt_travel_')) {
-        const encoded = customId.replace('hunt_travel_', '');
-
-        let travelData;
-        try {
-            travelData = JSON.parse(Buffer.from(encoded, 'base64').toString('utf-8'));
-        } catch {
-            await interaction.reply({ content: 'Invalid hunt travel data.', flags: MessageFlags.Ephemeral });
-            return;
-        }
-
-        // Check if clicking user's plugin is online
-        if (!pluginSocket.isOnline(userId)) {
-            await interaction.reply({
-                content: 'Your plugin is not connected. Use `/setup` to pair your plugin first.',
-                flags: MessageFlags.Ephemeral,
-            });
-            return;
-        }
-
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-        try {
-            const cmd = { action: 'go' };
-            if (travelData.w) cmd.world = travelData.w;
-            if (travelData.x != null) cmd.mapX = travelData.x;
-            if (travelData.y != null) cmd.mapY = travelData.y;
-            if (travelData.i) cmd.instance = travelData.i;
-            if (travelData.t) cmd.territoryId = travelData.t;
-
-            const result = await pluginSocket.sendCommand(userId, cmd, 60_000);
-            await interaction.editReply({
-                content: `Journey started! ${result.message || 'Traveling to hunt location...'}`,
-            });
-        } catch (err) {
-            await interaction.editReply({
-                content: `Failed to start journey: ${err.message}`,
-            });
-        }
-        return;
-    }
-
-    // --- Hunt: Dismiss ---
-    if (customId === 'hunt_dismiss') {
-        if (!isAdmin(userId)) {
-            await interaction.reply({
-                content: 'Only admins can dismiss hunt alerts.',
-                flags: MessageFlags.Ephemeral,
-            });
-            return;
-        }
-
-        try {
-            await interaction.message.delete();
-        } catch {
-            await interaction.reply({ content: 'Could not delete the message.', flags: MessageFlags.Ephemeral });
-        }
-        return;
-    }
 }
 
 /**
@@ -727,99 +664,5 @@ export async function handleModalSubmit(interaction) {
         }
 
         await interaction.editReply(buildGoWizardEmbed(status, plan, mapData));
-    }
-
-    // --- Hunt Report Modal ---
-    if (customId === 'hunt_report_modal') {
-        const worldInput = interaction.fields.getTextInputValue('hunt_world').trim();
-        const zoneInput = interaction.fields.getTextInputValue('hunt_zone')?.trim() || null;
-        const coordsInput = interaction.fields.getTextInputValue('hunt_coords')?.trim() || null;
-        const detailsInput = interaction.fields.getTextInputValue('hunt_details')?.trim() || null;
-
-        // Validate world
-        const allWorlds = getAllWorlds();
-        const worldMatch = allWorlds.find(w => w.toLowerCase() === worldInput.toLowerCase());
-        if (!worldMatch) {
-            await interaction.reply({
-                ...buildResultEmbed('Invalid World', `"${worldInput}" is not a valid FFXIV world name.`, false),
-                flags: MessageFlags.Ephemeral,
-            });
-            return;
-        }
-
-        // Parse coordinates
-        let x = null, y = null;
-        if (coordsInput) {
-            const coordMatch = coordsInput.match(/(\d{1,2}(?:\.\d{1,2})?)\s*[,\s]\s*(\d{1,2}(?:\.\d{1,2})?)/);
-            if (coordMatch) {
-                x = parseFloat(coordMatch[1]);
-                y = parseFloat(coordMatch[2]);
-                if (x < 1 || x > 42 || y < 1 || y > 42) { x = null; y = null; }
-            }
-        }
-
-        // Parse rank and mob name from details
-        let rank = null;
-        let mobName = null;
-        let instance = null;
-        if (detailsInput) {
-            // Rank
-            const rankMatch = detailsInput.match(/\b(SS?|A|B)\s*[- ]?[Rr]ank\b/i)
-                || detailsInput.match(/\b(SS?)\b/)
-                || detailsInput.match(/\b([SAB])\s+[Rr]ank/i);
-            if (rankMatch) rank = rankMatch[1].toUpperCase();
-
-            // Instance
-            const instMatch = detailsInput.match(/\bi(\d)\b/i) || detailsInput.match(/instance\s*#?\s*(\d)/i);
-            if (instMatch) instance = parseInt(instMatch[1]);
-
-            // Mob name — everything that's not rank/instance keywords
-            const cleaned = detailsInput
-                .replace(/\b(?:SS?|A|B)\s*[- ]?[Rr]ank\b/gi, '')
-                .replace(/\bi\d\b/gi, '')
-                .replace(/instance\s*#?\s*\d/gi, '')
-                .trim();
-            if (cleaned.length > 1) mobName = cleaned;
-        }
-
-        // Find zone
-        let zone = zoneInput;
-        if (!zone && !x && !y) {
-            await interaction.reply({
-                ...buildResultEmbed('Missing Info', 'Please provide either a zone name or coordinates (or both).', false),
-                flags: MessageFlags.Ephemeral,
-            });
-            return;
-        }
-
-        // If zone name given, validate it
-        if (zone) {
-            const zoneData = findZone(zone);
-            if (zoneData) zone = zoneData.zoneName; // normalize to official name
-        }
-
-        const huntInfo = {
-            mobName,
-            rank,
-            world: worldMatch,
-            zone,
-            x,
-            y,
-            instance,
-            raw: `User report: ${worldInput} ${zoneInput || ''} ${coordsInput || ''} ${detailsInput || ''}`,
-        };
-
-        await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-        const posted = await postManualHuntAlert(huntInfo, interaction.user.username);
-        if (posted) {
-            await interaction.editReply({
-                ...buildResultEmbed('Hunt Reported', `Your hunt sighting has been posted to the hunt alerts channel.\n\n**${rank ? `[${rank}] ` : ''}${mobName || 'Unknown'}** on **${worldMatch}**${zone ? ` in ${zone}` : ''}${x != null ? ` (${x}, ${y})` : ''}`, true),
-            });
-        } else {
-            await interaction.editReply({
-                ...buildResultEmbed('Report Failed', 'Could not post the hunt alert. The hunt output channel may not be configured, or this hunt was already reported recently.', false),
-            });
-        }
     }
 }

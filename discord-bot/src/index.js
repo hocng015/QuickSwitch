@@ -5,7 +5,6 @@ import { loadCommands, deployCommands } from './handlers/commandHandler.js';
 import { handleComponent, handleModalSubmit } from './handlers/componentHandler.js';
 import { initDatabase, closeDatabase } from './db.js';
 import { preCheck, postLog, buildCommandDetails, isAdmin } from './middleware.js';
-import { initHuntListener } from './hunts/huntListener.js';
 
 const PORT = process.env.PORT || 3000;
 
@@ -25,7 +24,7 @@ const httpServer = createServer((req, res) => {
     }
 
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('MoveMeXiv Bot Server');
+    res.end('QuickSwitch Bot Server');
 });
 
 // --- Attach WebSocket server ---
@@ -35,8 +34,6 @@ pluginSocket.attach(httpServer);
 const discord = new Client({
     intents: [
         GatewayIntentBits.Guilds,
-        GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent,
     ],
 });
 
@@ -48,9 +45,6 @@ discord.once(Events.ClientReady, async (client) => {
     // Load and deploy commands
     commands = await loadCommands();
     await deployCommands(commands);
-
-    // Initialize hunt notification listener
-    await initHuntListener(discord);
 });
 
 // Handle all interactions
@@ -63,7 +57,7 @@ discord.on(Events.InteractionCreate, async (interaction) => {
         const actionType = `command:${interaction.commandName}`;
 
         // Pre-checks (ban + rate limit) — skip for /admin from admins
-        const skipPreCheck = (interaction.commandName === 'admin' || interaction.commandName === 'hunts') && isAdmin(interaction.user.id);
+        const skipPreCheck = interaction.commandName === 'admin' && isAdmin(interaction.user.id);
         if (!skipPreCheck) {
             const check = await preCheck(interaction, actionType);
             if (!check.allowed) {

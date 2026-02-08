@@ -26,7 +26,7 @@ public class Configuration : IPluginConfiguration
     public bool RequireConfirmation { get; set; } = true;
 
     /// <summary>WebSocket server URL (Railway app URL).</summary>
-    public string WebSocketServerUrl { get; set; } = string.Empty;
+    public string WebSocketServerUrl { get; set; } = "https://quickswitch-production.up.railway.app";
 
     /// <summary>JWT auth token from pairing flow.</summary>
     public string AuthToken { get; set; } = string.Empty;
