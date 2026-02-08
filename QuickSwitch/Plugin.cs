@@ -45,7 +45,7 @@ public sealed class Plugin : IDalamudPlugin
         // Initialize feature managers
         characterTracker = new CharacterTracker(ClientState, PlayerState, ObjectTable, DataManager, Log, Configuration);
         characterSwitcher = new CharacterSwitcher(
-            Framework, GameGui, ClientState, CommandManager, Condition, Log, ChatGui, Configuration);
+            Framework, GameGui, ClientState, Condition, Log, ChatGui, Configuration);
 
         // Initialize WebSocket client for Discord bot communication
         WebSocketClient = new WebSocketClient(Log, Framework, Configuration);

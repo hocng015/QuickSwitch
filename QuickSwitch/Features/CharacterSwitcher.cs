@@ -1,6 +1,8 @@
 using System;
 using Dalamud.Game.ClientState.Conditions;
 using Dalamud.Plugin.Services;
+using FFXIVClientStructs.FFXIV.Client.System.String;
+using FFXIVClientStructs.FFXIV.Client.UI;
 using FFXIVClientStructs.FFXIV.Component.GUI;
 
 namespace QuickSwitch.Features;
@@ -11,6 +13,8 @@ public enum SwitchState
     InitiatingLogout,
     WaitingForLogoutDialog,
     ConfirmingLogout,
+    WaitingForTitleScreen,
+    ClickingStart,
     WaitingForCharSelect,
     SelectingCharacter,
     WaitingForLoginConfirm,
@@ -22,14 +26,13 @@ public enum SwitchState
 
 /// <summary>
 /// State machine that automates character switching:
-/// logout -> character select -> select character -> confirm login.
+/// logout -> title screen -> click start -> character select -> select character -> confirm login.
 /// </summary>
 public class CharacterSwitcher : IDisposable
 {
     private readonly IFramework framework;
     private readonly IGameGui gameGui;
     private readonly IClientState clientState;
-    private readonly ICommandManager commandManager;
     private readonly ICondition condition;
     private readonly IPluginLog log;
     private readonly IChatGui chatGui;
@@ -56,7 +59,6 @@ public class CharacterSwitcher : IDisposable
         IFramework framework,
         IGameGui gameGui,
         IClientState clientState,
-        ICommandManager commandManager,
         ICondition condition,
         IPluginLog log,
         IChatGui chatGui,
@@ -65,7 +67,6 @@ public class CharacterSwitcher : IDisposable
         this.framework = framework;
         this.gameGui = gameGui;
         this.clientState = clientState;
-        this.commandManager = commandManager;
         this.condition = condition;
         this.log = log;
         this.chatGui = chatGui;
@@ -116,7 +117,9 @@ public class CharacterSwitcher : IDisposable
     }
 
     /// <summary>
-    /// Quick logout to character select screen (no auto-login).
+    /// Quick logout to character select screen.
+    /// Note: FFXIV always goes to title screen first, so we automate clicking Start
+    /// to reach the character select screen.
     /// </summary>
     public bool InitiateLogout()
     {
@@ -256,6 +259,12 @@ public class CharacterSwitcher : IDisposable
                 case SwitchState.ConfirmingLogout:
                     HandleConfirmingLogout();
                     break;
+                case SwitchState.WaitingForTitleScreen:
+                    HandleWaitingForTitleScreen();
+                    break;
+                case SwitchState.ClickingStart:
+                    HandleClickingStart();
+                    break;
                 case SwitchState.WaitingForCharSelect:
                     HandleWaitingForCharSelect();
                     break;
@@ -288,7 +297,12 @@ public class CharacterSwitcher : IDisposable
             return;
         }
 
-        commandManager.ProcessCommand("/logout");
+        // Send /logout via the game's native chat processor
+        unsafe
+        {
+            SendChatCommand("/logout");
+        }
+
         SetState(SwitchState.WaitingForLogoutDialog);
         UpdateStatus("Issued /logout, waiting for confirmation dialog...");
     }
@@ -318,15 +332,40 @@ public class CharacterSwitcher : IDisposable
             values[0].Int = 0; // Yes
             addon->FireCallback(1, values);
 
-            if (logoutOnly)
+            // /logout always goes to the title screen first
+            SetState(SwitchState.WaitingForTitleScreen);
+            UpdateStatus("Confirmed logout. Waiting for title screen...");
+        }
+    }
+
+    private void HandleWaitingForTitleScreen()
+    {
+        unsafe
+        {
+            var addon = GetAddon("_TitleMenu");
+            if (addon != null)
             {
-                Complete("Logged out to character select.");
+                SetState(SwitchState.ClickingStart);
+                UpdateStatus("Title screen loaded. Clicking Start...");
             }
-            else
-            {
-                SetState(SwitchState.WaitingForCharSelect);
-                UpdateStatus("Confirmed logout. Waiting for character select...");
-            }
+        }
+    }
+
+    private void HandleClickingStart()
+    {
+        unsafe
+        {
+            var addon = GetAddon("_TitleMenu");
+            if (addon == null) return;
+
+            // FireCallback with value 4 clicks "Start" on the title menu
+            var values = stackalloc AtkValue[1];
+            values[0].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;
+            values[0].Int = 4;
+            addon->FireCallback(1, values, true);
+
+            SetState(SwitchState.WaitingForCharSelect);
+            UpdateStatus("Clicked Start. Waiting for character select...");
         }
     }
 
@@ -337,8 +376,15 @@ public class CharacterSwitcher : IDisposable
             var addon = GetAddon("_CharaSelectListMenu");
             if (addon != null)
             {
-                SetState(SwitchState.SelectingCharacter);
-                UpdateStatus("Character select loaded. Selecting character...");
+                if (logoutOnly)
+                {
+                    Complete("Reached character select screen.");
+                }
+                else
+                {
+                    SetState(SwitchState.SelectingCharacter);
+                    UpdateStatus("Character select loaded. Selecting character...");
+                }
             }
         }
     }
@@ -416,6 +462,37 @@ public class CharacterSwitcher : IDisposable
         }
     }
 
+    /// <summary>
+    /// Send a chat command to the game's native chat processor.
+    /// This works for game-native commands like /logout, /return, etc.
+    /// </summary>
+    private unsafe void SendChatCommand(string command)
+    {
+        var uiModule = UIModule.Instance();
+        if (uiModule == null)
+        {
+            log.Error("[QuickSwitch] UIModule is null, cannot send chat command.");
+            return;
+        }
+
+        var utf8Str = Utf8String.FromString(command);
+        if (utf8Str == null)
+        {
+            log.Error("[QuickSwitch] Failed to create Utf8String for chat command.");
+            return;
+        }
+
+        try
+        {
+            uiModule->ProcessChatBoxEntry(utf8Str);
+            log.Info($"[QuickSwitch] Sent chat command: {command}");
+        }
+        finally
+        {
+            utf8Str->Dtor(true);
+        }
+    }
+
     private void SetState(SwitchState newState)
     {
         log.Info($"[QuickSwitch] State: {state} -> {newState}");
@@ -479,6 +556,8 @@ public class CharacterSwitcher : IDisposable
         SwitchState.InitiatingLogout => 5,
         SwitchState.WaitingForLogoutDialog => 10,
         SwitchState.ConfirmingLogout => 5,
+        SwitchState.WaitingForTitleScreen => 30,
+        SwitchState.ClickingStart => 10,
         SwitchState.WaitingForCharSelect => config.StateTimeoutSeconds,
         SwitchState.SelectingCharacter => 10,
         SwitchState.WaitingForLoginConfirm => 15,
