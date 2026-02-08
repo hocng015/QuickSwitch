@@ -448,10 +448,20 @@ public class MainWindow : Window, IDisposable
 
     private void DrawSwitchConfirmDialog()
     {
-        ImGui.SetNextWindowSize(new Vector2(300, 120), ImGuiCond.FirstUseEver);
+        var windowSize = new Vector2(300, 120);
+        ImGui.SetNextWindowSize(windowSize, ImGuiCond.Always);
+
+        // Center on screen
+        var viewport = ImGui.GetMainViewport();
+        var centerPos = new Vector2(
+            viewport.Pos.X + (viewport.Size.X - windowSize.X) * 0.5f,
+            viewport.Pos.Y + (viewport.Size.Y - windowSize.Y) * 0.5f);
+        ImGui.SetNextWindowPos(centerPos, ImGuiCond.Always);
+        ImGui.SetNextWindowFocus();
+
         var open = true;
 
-        if (ImGui.Begin("Confirm###QuickSwitchConfirm", ref open, ImGuiWindowFlags.NoCollapse))
+        if (ImGui.Begin("Confirm###QuickSwitchConfirm", ref open, ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoMove))
         {
             if (pendingSwitchTarget != null)
                 ImGui.Text($"Switch to {pendingSwitchTarget.Name} @ {pendingSwitchTarget.HomeWorld}?");
