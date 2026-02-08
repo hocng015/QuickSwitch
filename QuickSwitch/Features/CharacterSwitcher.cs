@@ -17,6 +17,8 @@ public enum SwitchState
     WaitingForTitleScreen,
     ClickingStart,
     WaitingForCharSelect,
+    SwitchingWorld,
+    WaitingForWorldSwitch,
     SelectingCharacter,
     WaitingForLoginConfirm,
     ConfirmingLogin,
@@ -27,7 +29,7 @@ public enum SwitchState
 
 /// <summary>
 /// State machine that automates character switching:
-/// logout -> title screen -> click start -> character select -> select character -> confirm login.
+/// logout -> title screen -> click start -> character select -> [switch world] -> select character -> confirm login.
 /// </summary>
 public class CharacterSwitcher : IDisposable
 {
@@ -44,6 +46,7 @@ public class CharacterSwitcher : IDisposable
     private bool logoutOnly;
     private DateTime stateEnteredTime;
     private bool loginDetected;
+    private bool worldSwitchAttempted;
 
     private const float ThrottleSeconds = 1.0f;
     private DateTime lastTickTime;
@@ -101,6 +104,7 @@ public class CharacterSwitcher : IDisposable
         targetCharacter = target;
         logoutOnly = false;
         loginDetected = false;
+        worldSwitchAttempted = false;
         lastSwitchTime = DateTime.UtcNow;
         clientState.Login += OnLoginDetected;
 
@@ -140,6 +144,7 @@ public class CharacterSwitcher : IDisposable
         targetCharacter = null;
         logoutOnly = true;
         loginDetected = false;
+        worldSwitchAttempted = false;
         lastSwitchTime = DateTime.UtcNow;
 
         SetState(SwitchState.InitiatingLogout);
@@ -263,6 +268,12 @@ public class CharacterSwitcher : IDisposable
                 case SwitchState.WaitingForCharSelect:
                     HandleWaitingForCharSelect();
                     break;
+                case SwitchState.SwitchingWorld:
+                    HandleSwitchingWorld();
+                    break;
+                case SwitchState.WaitingForWorldSwitch:
+                    HandleWaitingForWorldSwitch();
+                    break;
                 case SwitchState.SelectingCharacter:
                     HandleSelectingCharacter();
                     break;
@@ -371,7 +382,7 @@ public class CharacterSwitcher : IDisposable
             var addon = GetAddon("_CharaSelectListMenu");
             if (addon != null)
             {
-                // Auto-detect character slots from AgentLobby
+                // Auto-detect character slots from AgentLobby (for the currently displayed world)
                 ScanAndUpdateCharacterSlots();
 
                 if (logoutOnly)
@@ -380,10 +391,95 @@ public class CharacterSwitcher : IDisposable
                 }
                 else
                 {
-                    SetState(SwitchState.SelectingCharacter);
-                    UpdateStatus("Character select loaded. Selecting character...");
+                    // Check if the target character is on the currently displayed world
+                    var slotIndex = FindCharacterIndexInLobby(targetCharacter!.ContentId);
+                    if (slotIndex >= 0)
+                    {
+                        // Target is on the current world, go straight to selecting
+                        SetState(SwitchState.SelectingCharacter);
+                        UpdateStatus("Character select loaded. Selecting character...");
+                    }
+                    else
+                    {
+                        // Target not on current world, need to switch worlds
+                        SetState(SwitchState.SwitchingWorld);
+                        UpdateStatus($"Character not on current world. Switching to {targetCharacter.HomeWorld}...");
+                    }
                 }
             }
+        }
+    }
+
+    private void HandleSwitchingWorld()
+    {
+        if (targetCharacter == null)
+        {
+            Fail("No target character set.");
+            return;
+        }
+
+        if (worldSwitchAttempted)
+        {
+            Fail($"Already tried switching worlds but character '{targetCharacter.Name}' still not found on {targetCharacter.HomeWorld}.");
+            return;
+        }
+
+        unsafe
+        {
+            var worldAddon = GetAddon("_CharaSelectWorldServer");
+            if (worldAddon == null)
+            {
+                // World server addon might not be visible yet, wait
+                UpdateStatus($"Waiting for world list to load...");
+                return;
+            }
+
+            // Find the target world in the world list and click it
+            var worldIndex = FindWorldIndexInAddon(targetCharacter.HomeWorld);
+            if (worldIndex < 0)
+            {
+                Fail($"World '{targetCharacter.HomeWorld}' not found in the world list. Is it in a different data center?");
+                return;
+            }
+
+            log.Info($"[QuickSwitch] Selecting world {targetCharacter.HomeWorld} at index {worldIndex}");
+
+            // Fire callback (25, 0, index) on _CharaSelectWorldServer to select the world
+            var values = stackalloc AtkValue[3];
+            values[0].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;
+            values[0].Int = 25;
+            values[1].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;
+            values[1].Int = 0;
+            values[2].Type = FFXIVClientStructs.FFXIV.Component.GUI.ValueType.Int;
+            values[2].Int = worldIndex;
+            worldAddon->FireCallback(3, values);
+
+            worldSwitchAttempted = true;
+            SetState(SwitchState.WaitingForWorldSwitch);
+            UpdateStatus($"Switched to {targetCharacter.HomeWorld}. Waiting for character list to update...");
+        }
+    }
+
+    private void HandleWaitingForWorldSwitch()
+    {
+        if (targetCharacter == null)
+        {
+            Fail("No target character set.");
+            return;
+        }
+
+        unsafe
+        {
+            // Wait for CharaSelectEntries to be repopulated with the target character
+            var slotIndex = FindCharacterIndexInLobby(targetCharacter.ContentId);
+            if (slotIndex >= 0)
+            {
+                // Found the target on the new world! Scan and update slots, then select
+                ScanAndUpdateCharacterSlots();
+                SetState(SwitchState.SelectingCharacter);
+                UpdateStatus($"Found {targetCharacter.Name} on {targetCharacter.HomeWorld}. Selecting...");
+            }
+            // Otherwise keep waiting (throttled by the 1s tick)
         }
     }
 
@@ -404,17 +500,8 @@ public class CharacterSwitcher : IDisposable
             var slotIndex = FindCharacterIndexInLobby(targetCharacter.ContentId);
             if (slotIndex < 0)
             {
-                // Fall back to stored slot if ContentId lookup fails
-                if (targetCharacter.CharacterSlot >= 0)
-                {
-                    slotIndex = targetCharacter.CharacterSlot;
-                    log.Warning($"[QuickSwitch] ContentId lookup failed, falling back to stored slot {slotIndex + 1}.");
-                }
-                else
-                {
-                    Fail($"Character '{targetCharacter.Name}' not found on character select screen.");
-                    return;
-                }
+                Fail($"Character '{targetCharacter.Name}' not found on character select screen.");
+                return;
             }
 
             // FireCallback with command 29 to select a character by slot index
@@ -479,7 +566,7 @@ public class CharacterSwitcher : IDisposable
 
     /// <summary>
     /// Scan the character select screen via AgentLobby and update stored slot indices
-    /// for all known characters. This auto-detects slots so users don't have to configure them.
+    /// for all known characters on the currently displayed world.
     /// </summary>
     private unsafe void ScanAndUpdateCharacterSlots()
     {
@@ -554,6 +641,44 @@ public class CharacterSwitcher : IDisposable
         catch (Exception ex)
         {
             log.Error($"[QuickSwitch] Error finding character in lobby: {ex.Message}");
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Find a world's index in the _CharaSelectWorldServer addon's world list.
+    /// The world list is read from the StringArrayData at index 1 in AtkArrayDataHolder.
+    /// Returns the 0-based index, or -1 if not found.
+    /// </summary>
+    private unsafe int FindWorldIndexInAddon(string worldName)
+    {
+        try
+        {
+            var raptureModule = RaptureAtkModule.Instance();
+            if (raptureModule == null) return -1;
+
+            var stringArrayData = raptureModule->AtkArrayDataHolder.StringArrays[1];
+            if (stringArrayData == null) return -1;
+
+            // The string array contains world names; iterate to find the target
+            for (var i = 0; i < stringArrayData->Size; i++)
+            {
+                var str = stringArrayData->StringArray[i].ToString();
+                if (string.IsNullOrEmpty(str)) continue;
+
+                if (str.Equals(worldName, StringComparison.OrdinalIgnoreCase))
+                {
+                    log.Info($"[QuickSwitch] Found world '{worldName}' at index {i}");
+                    return i;
+                }
+            }
+
+            log.Warning($"[QuickSwitch] World '{worldName}' not found in world list.");
+        }
+        catch (Exception ex)
+        {
+            log.Error($"[QuickSwitch] Error finding world index: {ex.Message}");
         }
 
         return -1;
@@ -656,6 +781,8 @@ public class CharacterSwitcher : IDisposable
         SwitchState.WaitingForTitleScreen => 30,
         SwitchState.ClickingStart => 10,
         SwitchState.WaitingForCharSelect => config.StateTimeoutSeconds,
+        SwitchState.SwitchingWorld => 10,
+        SwitchState.WaitingForWorldSwitch => 15,
         SwitchState.SelectingCharacter => 10,
         SwitchState.WaitingForLoginConfirm => 15,
         SwitchState.ConfirmingLogin => 5,
