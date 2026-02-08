@@ -129,7 +129,7 @@ export class PluginSocketManager {
         // Send welcome
         ws.send(JSON.stringify({
             type: 'connected',
-            payload: { message: 'Connected to MoveMeXiv server.' },
+            payload: { message: 'Connected to QuickSwitch server.' },
         }));
 
         ws.on('message', (data) => {

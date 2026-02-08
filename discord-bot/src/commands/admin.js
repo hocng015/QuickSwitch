@@ -12,7 +12,7 @@ import { buildResultEmbed } from '../ui/embeds.js';
 
 export const data = new SlashCommandBuilder()
     .setName('admin')
-    .setDescription('Admin commands for managing MoveMeXiv.')
+    .setDescription('Admin commands for managing QuickSwitch.')
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
     .addSubcommand(sub =>
         sub.setName('audit')
@@ -23,7 +23,7 @@ export const data = new SlashCommandBuilder()
             )
             .addStringOption(opt =>
                 opt.setName('action')
-                    .setDescription('Filter by action type (e.g. command:go, component:go_execute)')
+                    .setDescription('Filter by action type (e.g. command:switch, qs:switch)')
             )
             .addIntegerOption(opt =>
                 opt.setName('hours')

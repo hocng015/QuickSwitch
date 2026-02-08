@@ -10,11 +10,7 @@ import { logAudit, upsertUser, isUserBanned } from './db.js';
 const rateLimits = new Map();
 
 const RATE_LIMIT_RULES = {
-    'command:go':       { max: 5,  windowMs: 60_000 },
     'command:setup':    { max: 3,  windowMs: 300_000 },
-    'command:stop':     { max: 10, windowMs: 60_000 },
-    'command:bookmark': { max: 10, windowMs: 60_000 },
-    'command:status':   { max: 10, windowMs: 60_000 },
     'command:admin':    { max: 20, windowMs: 60_000 },
     'command:switch':   { max: 5,  windowMs: 60_000 },
     'component':        { max: 30, windowMs: 60_000 },

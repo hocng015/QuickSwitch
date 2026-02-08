@@ -1,7 +1,7 @@
 {
-  "name": "movemexiv-bot",
+  "name": "quickswitch-bot",
   "version": "1.0.0",
-  "description": "Discord bot for MoveMeXiv Dalamud plugin - remote character control",
+  "description": "Discord bot for QuickSwitch Dalamud plugin - remote character switching",
   "main": "src/index.js",
   "type": "module",
   "scripts": {
@@ -12,7 +12,6 @@
     "discord.js": "^14.18.0",
     "jsonwebtoken": "^9.0.2",
     "pg": "^8.18.0",
-    "sharp": "^0.34.5",
     "ws": "^8.18.0"
   }
 }
