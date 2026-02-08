@@ -426,10 +426,12 @@ public class CharacterSwitcher : IDisposable
 
         unsafe
         {
-            var worldAddon = GetAddon("_CharaSelectWorldServer");
+            // _CharaSelectWorldServer exists in memory but may not be visible (sidebar closed)
+            // The callback works even when the addon isn't visible
+            var worldAddon = GetAddonAny("_CharaSelectWorldServer");
             if (worldAddon == null)
             {
-                // World server addon might not be visible yet, wait
+                // Addon truly doesn't exist yet, wait
                 UpdateStatus($"Waiting for world list to load...");
                 return;
             }
@@ -759,6 +761,17 @@ public class CharacterSwitcher : IDisposable
         if (!addon->IsVisible) return null;
 
         return addon;
+    }
+
+    /// <summary>
+    /// Get an addon pointer without requiring it to be visible.
+    /// Some addons (like _CharaSelectWorldServer) exist in memory but aren't visible.
+    /// </summary>
+    private unsafe AtkUnitBase* GetAddonAny(string name)
+    {
+        var addonPtr = gameGui.GetAddonByName(name);
+        if (addonPtr.Address == nint.Zero) return null;
+        return (AtkUnitBase*)addonPtr.Address;
     }
 
     private bool IsOccupied()
