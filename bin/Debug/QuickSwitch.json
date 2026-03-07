@@ -1,0 +1,16 @@
+{
+  "Author": "Hoc",
+  "Name": "QuickSwitch",
+  "InternalName": "QuickSwitch",
+  "AssemblyVersion": "1.0.12.0",
+  "Description": "Detects your characters on login and lets you quickly switch between them with a single click. Supports both quick logout to character select and fully automated character switching.",
+  "ApplicableVersion": "any",
+  "RepoUrl": "https://github.com/hocng015/QuickSwitch-Release",
+  "DalamudApiLevel": 14,
+  "LoadRequiredState": 0,
+  "LoadSync": false,
+  "CanUnloadAsync": false,
+  "LoadPriority": 0,
+  "Punchline": "Quickly switch between FFXIV characters.",
+  "AcceptsFeedback": true
+}

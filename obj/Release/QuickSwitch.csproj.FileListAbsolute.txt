@@ -1,0 +1,9 @@
+C:\Users\Hoc\FreeMover\QuickSwitch\bin\Release\QuickSwitch.deps.json
+C:\Users\Hoc\FreeMover\QuickSwitch\bin\Release\QuickSwitch.dll
+C:\Users\Hoc\FreeMover\QuickSwitch\obj\Release\QuickSwitch.csproj.AssemblyReference.cache
+C:\Users\Hoc\FreeMover\QuickSwitch\obj\Release\QuickSwitch.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Hoc\FreeMover\QuickSwitch\obj\Release\QuickSwitch.AssemblyInfoInputs.cache
+C:\Users\Hoc\FreeMover\QuickSwitch\obj\Release\QuickSwitch.AssemblyInfo.cs
+C:\Users\Hoc\FreeMover\QuickSwitch\obj\Release\QuickSwitch.csproj.CoreCompileInputs.cache
+C:\Users\Hoc\FreeMover\QuickSwitch\obj\Release\QuickSwitch.sourcelink.json
+C:\Users\Hoc\FreeMover\QuickSwitch\obj\Release\QuickSwitch.dll

@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "Dagbh9Uiv2E=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\Hoc\\FreeMover\\QuickSwitch\\QuickSwitch.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\Hoc\\.nuget\\packages\\dalamudpackager\\14.0.1\\dalamudpackager.14.0.1.nupkg.sha512",
+    "C:\\Users\\Hoc\\.nuget\\packages\\dotnet.reproduciblebuilds\\1.2.39\\dotnet.reproduciblebuilds.1.2.39.nupkg.sha512"
+  ],
+  "logs": []
+}
