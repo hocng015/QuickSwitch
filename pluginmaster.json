@@ -1,0 +1,24 @@
+[
+    {
+        "Author": "Hoc",
+        "Name": "QuickSwitch",
+        "Punchline": "Quickly switch between FFXIV characters.",
+        "Description": "Detects your characters on login and lets you quickly switch between them with a single click. Supports both quick logout to character select and fully automated character switching. Features safety guards (cooldowns, confirmations, blocks during combat/duties/cutscenes/crafting/gathering), Discord bot integration for remote switching, and admin controls (whitelist/blacklist, force switch/logout, audit logging).",
+        "ApplicableVersion": "any",
+        "Tags": [
+            "character",
+            "switch",
+            "logout",
+            "alt",
+            "quick switch",
+            "discord"
+        ],
+        "IconUrl": "https://raw.githubusercontent.com/hocng015/QuickSwitch/master/icon.png",
+        "RepoUrl": "https://github.com/hocng015/QuickSwitch",
+        "AssemblyVersion": "1.0.12.0",
+        "InternalName": "QuickSwitch",
+        "DalamudApiLevel": 14,
+        "DownloadLinkInstall": "https://github.com/hocng015/QuickSwitch/releases/latest/download/QuickSwitch.zip",
+        "DownloadLinkUpdate": "https://github.com/hocng015/QuickSwitch/releases/latest/download/QuickSwitch.zip"
+    }
+]
